@@ -1,131 +1,209 @@
-# INSPORT-refactor
-Don Rosenthal  
-February 2025
+# Prompt Playground
 
-## Running with VS Code
-1. Open the folder in VS Code
-2. Click "Reopen in Container" when prompted
-3. VS Code will build and start the development environment
+A web-based tool for testing LLM prompts with real Gmail data. Built to help developers and AI engineers experiment with different prompts against actual email content, making it easier to develop and debug email processing workflows.
 
-## Running without VS Code
-1. Be sure to uncomment and update the final COPY and CMD instructions in Dockerfile if they are not already.
-2.Build the container: `docker build -t insport-app .`
-3. Run the container: `docker run -it -v $(pwd):/app insport-app`
+## Features
 
+- **Gmail Integration**: Fetch real emails from your Gmail account by date
+- **Interactive Email List**: Browse and select from all fetched emails in a sidebar
+- **LLM Chat Interface**: Test prompts against selected email content
+- **Streaming Responses**: Real-time LLM responses via Server-Sent Events
+- **Email Context Injection**: Automatically includes email body, sender, subject, and date in your queries
+- **Conversation History**: Maintains chat context across multiple queries
+- **Timezone-Aware**: Correctly displays email timestamps in your local timezone
 
-## Background
+## Use Cases
 
-The Chatbot POC was originally meant to test the AI capabilities desired for the original Insurance Portal website. That version of the chatbot was conceived as a component of a larger application.
+- Developing email classification prompts
+- Testing email summarization approaches
+- Debugging email parsing logic
+- Prototyping email automation workflows
+- Experimenting with different LLM models for email tasks
 
-In addition to functions performed by the main application which are not connected to the browser-based Chatbot, it relied on the main application for such standard functions as user login and authentication, long term storage of user data (name, profile, etc.), and the uploading and storage of user's insurance policies. Most importantly, the main application, not the bot, was tasked with converting those policies from .pdf file to a text-based version that was usable by the LLM.
+## Prerequisites
 
-The chatbot controls user interactions with the LLM, the UI, and the maintenance of session state of the chat through as many focus changes to and from the chatbot as the user initiates. When the chatbot needs user data or the contents of any of their files, it will GET that data through API calls, but will not store any of the retrieved data. The chatbot can also PUT or change some of the user data through API calls.
+- Python 3.8+
+- Gmail account with API access enabled
+- Google Cloud Console project with Gmail API enabled
+- OAuth 2.0 credentials for Gmail API
+- Anthropic API key for Claude
 
-The main functionality of the bot to be incorporated and tested by this POC were the AI-based functions: developing the system prompts; the building of the queries out of system prompts, optional policy contents, optional policy contents instructions, and user queries; and the streaming of the responses from the LLM.
+## Installation
 
-In addition, a fully functional, but not "designer pretty" UI was generated to connect UI events to event handlers for such things as initialization, user policy selection, user query input, focus change, etc. A minimal landing page was also included to enable the tester to simulate switching back and forth between the bot and the main app to test state management through focus changes.
+### 1. Clone the Repository
 
-## Disclaimers
+```bash
+git clone https://github.com/yourusername/Prompt_Playground.git
+cd Prompt_Playground
+```
 
-I have not coded commercially for a long time, and have never built front-ends, so my work was mostly focused on the AI components, and the POC demo was never intended to include a full client-server implementation. That architecture was simulated by carefully separating out functionality into different subdirectories, and enabling access to that code by including those files as libraries. There are no actual APIs or API calls.
+### 2. Create Virtual Environment
 
-In addition, as there was no actual main application for the POC version of the chatbot, it needed to include some basic functionality that the main app would be supplying, such as .pdf conversion. The deployed system will need to utilize some more capable converters, that, e.g., include OCR, as the POC utilized pdfminer, which is quite limited.
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On macOS/Linux
+# or
+.venv\Scripts\activate  # On Windows
+```
 
-The LLM that was originally chosen for the Chatbot was OpenAI's GPT-based family. This was changed to Gemini when the decision was made to try to partner with Google. The conversion was made before Gemini's API included OpenAI compatibility, requiring code changes to implement direct access to the Gemini APIs. The original GPT-based system prompts, chains, etc., are retained in the code, in commented-out sections.
+### 3. Install Dependencies
 
-## Directory Tree
+```bash
+pip install -r requirements.txt
+```
 
-The code was divided up into separate files and directories based on function:
-- **root**
-  - home.html (the "landing page")
-  - chatbot.html (the chatbot page)
-  - script.js (for the chatbot)
-  - styles.css (for the chatbot)
-  - ui_Chatbot_prototype.py (the Python "main")
-- **handlers (subdirectory)**
-  - Ui_handler_functions.py (the logic required to handle UI events)
-- **persistent_data (subdirectory)**
-  - ui_session_data_mgmt.py (session state data management)
-- **server_data (subdirectory)**
-  - ui_server_side_data.py (mocked up server-side data)
-- **PDF_speriments**
-  - Directory where the test policy .pdf files and their converted versions are stored
-- **.devcontainer (subdirectory)**
-  - devcontainer.json (defines the Docker container and initializes the Python environment)
-- **.images (subdirectory)**
-  - Contains a screenshot used by the readme.md file -- no code.
+### 4. Set Up Gmail API Credentials
 
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Gmail API
+4. Create OAuth 2.0 credentials (Desktop app)
+5. Download the credentials file and save it as `credentials.json` in the project root
 
-## Current Status
+### 5. Set Up Environment Variables
 
-All of the required functionality for the version of the chatbot described above is fully tested and running to spec, (and is fully documented in a series of SOWs).
+Create a `.env` file in the project root:
 
-Cloning the repo is discussed below in [Cloning the Repo and Running the Code](#cloning-the-repo-and-running-the-code).
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+```
 
-After the completion of that work, significant additional requirements were requested, based on a change towards focussing on Consumer Advocacy. These are **additional** requirements, and do not affect the initial requirements. Work has begun on the new requirements, but due to my absence on medical leave, none of those requirements have been fully implemented yet. They are discussed below in the [New Work](#new-work) section below.
+## Usage
 
-## Cloning the Repo and Running the Code
+### Starting the Server
 
-### Cloning the Repo
+```bash
+python ui_Chatbot_prototype.py
+```
 
-The repo can be found at [https://github.com/donrosenthal/INSPORT-refactor.git](https://github.com/donrosenthal/INSPORT-refactor.git)
+The server will start on `http://localhost:8000`
 
-1. Open your CLI and navigate to the directory where you want to clone the repo
-2. In your terminal, type, "git clone https://github.com/donrosenthal/INSPORT-refactor.git"
-3. It should create the directory "INSPORT-refactor" with this top-level directory:
+### First Run - Gmail Authentication
 
-![Screenshot of directory structure](./images/directory-screenshot.png)
+On your first run, the application will:
+1. Open your browser for Gmail OAuth authorization
+2. Ask you to grant permissions to read Gmail messages
+3. Create a `token.json` file to store your credentials
 
-4. The file "requirements.txt" contains the requirements needed to build the python environment, including for both Gemini and OpenAI (OpenAI currently commented out).
-   - The requirements.txt file is used by devcontainer.json in the .devcontainer subdirectory
+**Important**: Keep `credentials.json` and `token.json` secure and never commit them to version control.
 
-### API Keys
+### Using the Interface
 
-Create a .env file in the root directory of the cloned repo. Include the following:
+1. **Fetch Emails**:
+   - Select a date using the date picker in the sidebar
+   - Click "Fetch" to retrieve emails from that date
+   - All email metadata (sender, subject, date) will appear in a scrollable list
 
-- For Gemini, include an API key from a metered account. (Rate limits of a Free Tier account are extremely low.)
-  - `GOOGLE_API_KEY="Your_Gemini_API_Key"`
-- For OpenAI:
-  - `OPENAI_API_KEY="Your_OpenAI_API_Key"`
-- And a Langchain API key:
-  - `LANGCHAIN_API_KEY="Your_Langchain_API_Key"`
+2. **Select an Email**:
+   - Click any email in the list to select it
+   - The email body is fetched on-demand (lazy loading)
+   - Selected email is highlighted in blue
 
-### Running the Code
+3. **Query with Context**:
+   - Type your prompt in the text area
+   - The selected email's full content is automatically injected into your query
+   - LLM responses stream in real-time
 
-The code is built to run from VSCode, but as it is containerized it should run from anywhere you can create the docker container.
+4. **Clear Conversation**:
+   - Click "Clear Conversation" to reset the chat history
+   - Email list and selection persist
 
-In VSCode:
-1. In the terminal, navigate to the root directory of the cloned repo.
-2. Use Command (⌘) + Shift + P to open the Command Palette, and select, "Dev Containers: Rebuild Container Without Cache"
-3. When that has completed, press any key to close the terminal.
-4. Reopen the terminal in the root directory
-5. Launch the demo with: `python ui_Chatbot_prototype.py --user <user-choice>`, where user choice can be either "user0" or "user2".
-   - (`python ui_C* ---user <user-choice>` works as well, of course.)
-   - Choosing user0 will open the demo with a user who has not uploaded any policies
-   - Choosing user2 will upload the demo with a user who has uploaded 2 policies
-     - Although only Lincoln Life 2 is functional
-6. A popup will appear to allow you to Open the demo in a Browser from port 8000
-   - Click "Open in Browser"
-7. This will display the "Landing Page"
-8. Click "Click here to switch to the Chatbot"
-9. This will take you to the Chatbot Page
-10. Here you can ask any questions about insurance (e.g., What is the difference between term and permanent Life Insurance?)
-11. And if you have chosen user2, you can select "Lincoln Life 2 (Term)" from the radio buttons, and also ask questions about that policy (e.g. What is the premium schedule for this policy? Are there any "gotchas" in this policy that I should be aware of?, etc.)
+## Architecture
 
-## New Work
+### Backend
 
-Note that the "new" requirements have since been been changed and added to, but those have not yet been formally gathered and documented.
+- [ui_Chatbot_prototype.py](ui_Chatbot_prototype.py) - Simple HTTP server with SSE support
+- [handlers/ui_handler_functions.py](handlers/ui_handler_functions.py) - API endpoint handlers
+- [V0.4.py](V0.4.py) - Gmail integration module with OAuth and API calls
 
-The new work is spelled out in the Google Doc [Prioritization of New Insurance Portal Chatbot Features](https://docs.google.com/document/d/1zj7AFBqYIsLiSFQ89tDgYuGVwArh_CkesH8h9108ZUw/edit?tab=t.0#heading=h.ft71h42ixbpg), and includes the following sections:
+### Frontend
 
-1. Generate the SOW
-2. Chatbot PRD
-3. Accommodate All Insurance Types
-4. Referral to an Insurance Professional
-5. Caching of reused text
-6. Gemini-based PDF Converter
-7. Consumer Advocacy
-8. Actual Client/Server Architecture
-9. Put all hardcoded values into a separate YAML configuration file
+- [chatbot.html](chatbot.html) - Main UI structure with sidebar and chat area
+- [script.js](script.js) - Client-side logic for email list, selection, and chat
+- [styles.css](styles.css) - Responsive styling with Gmail-inspired email list
 
-Section 5. above (Caching of reused text), itself refers to an additional document: [Using Cached Context with the Insurance Portal Chatbot](https://docs.google.com/document/d/1QvCHZClN3jMt_MPnnQ07y5lv9skIr-N-b5R4Illhc8U/edit?tab=t.0#heading=h.536666sjs5od) which goes into much more detail about the specific constraints of caching both the insurance policy contents as well as the texts from the system prompt, the policy prompt addition, etc.
+### Key Design Decisions
+
+1. **Lazy Loading**: Email bodies are only fetched when user clicks an email, keeping initial load fast
+2. **Timezone Handling**: Uses Gmail's `internal_date` (Unix timestamp) and converts to local time, ensuring accurate display and sorting
+3. **Email Context Injection**: Full email content is prepended to user queries automatically, making it seamless to test prompts
+4. **Server-Sent Events**: Enables real-time streaming of LLM responses for better UX
+
+## File Structure
+
+```
+Prompt_Playground/
+├── ui_Chatbot_prototype.py       # Main server
+├── V0.4.py                        # Gmail integration module
+├── chatbot.html                   # UI template
+├── script.js                      # Frontend JavaScript
+├── styles.css                     # Styling
+├── handlers/
+│   └── ui_handler_functions.py   # API endpoint handlers
+├── credentials.json               # Gmail OAuth credentials (gitignored)
+├── token.json                     # OAuth tokens (gitignored)
+├── .env                           # Environment variables (gitignored)
+├── requirements.txt               # Python dependencies
+└── README.md                      # This file
+```
+
+## Gmail API Scopes
+
+The application requests the following Gmail API scope:
+- `https://www.googleapis.com/auth/gmail.readonly`: Read-only access to email metadata and content
+
+**Note**: If you modify the scopes in the code, delete `token.json` to trigger re-authorization.
+
+## Troubleshooting
+
+### "Error fetching emails"
+- Verify `credentials.json` is present and valid
+- Check that Gmail API is enabled in Google Cloud Console
+- Delete `token.json` and re-authenticate
+
+### "Email body not loading"
+- Check console for error messages
+- Verify the email exists in your Gmail account
+- Some emails may have empty bodies (forwards, calendar invites, etc.)
+
+### "Wrong timezone displayed"
+- The app uses `datetime.fromtimestamp()` to convert to local time
+- Verify your system timezone is set correctly
+
+### Server won't start
+- Check if port 8000 is already in use
+- Verify all dependencies are installed: `pip install -r requirements.txt`
+- Ensure `.env` file exists with valid `ANTHROPIC_API_KEY`
+
+## Development Status
+
+This tool is in active development. Current version: **v0.1**
+
+Planned enhancements:
+- Support for multiple email accounts
+- Email filtering and search
+- Prompt templates library
+- Export conversation history
+- Multi-model support (OpenAI, Gemini, etc.)
+
+## Related Projects
+
+This tool was developed alongside [Multi_Agent_Email_tool](https://github.com/yourusername/Multi_Agent_Email_tool), a production email automation system. Shared Gmail functions may eventually be extracted into a separate `gmail-utils` library.
+
+## License
+
+MIT License
+
+## Security Notes
+
+- Never commit `credentials.json`, `token.json`, or `.env` files
+- Keep your API keys secure
+- Review OAuth permissions before authorizing
+- This tool has read-only Gmail access
+
+## Acknowledgments
+
+- Built with [Claude](https://claude.ai) - Anthropic's AI assistant
+- Uses Gmail API for email access
+- Markdown rendering by [marked.js](https://marked.js.org/)
+- HTML sanitization by [DOMPurify](https://github.com/cure53/DOMPurify)

@@ -1,14 +1,82 @@
 import sys
 import os
-import psutil
+# import psutil  # Commented out - only used for debugging utilities we don't need
 import time
 import logging
+
+# Add path to Multi_Agent_Email_tool for email fetching functions
+# Go up from handlers/ to Prompt_Playground/, then up to All_Coding_Projects/, then into Multi_Agent_Email_tool/
+project_root = os.path.dirname(os.path.dirname(__file__))  # Get Prompt_Playground directory
+email_tool_path = os.path.join(os.path.dirname(project_root), 'Multi_Agent_Email_tool')
+sys.path.insert(0, email_tool_path)
 
 from persistent_data.ui_session_data_mgmt import *
 from typing import Optional, Tuple, List
 from server_data.ui_server_side_data import *
 
-from pdf_processor_service.pdf_processor import *
+# Commented out - PDF processing not needed for prompt playground
+# from pdf_processor_service.pdf_processor import *
+
+# Import email fetching functions from Multi_Agent_Email_tool
+# TODO [Future Enhancement]: Extract shared Gmail functions into a separate gmail-utils library
+#       This would allow both Prompt_Playground and Multi_Agent_Email_tool to use the same
+#       authentication, message fetching, and parsing code. Ideal structure:
+#       - gmail-utils library (pip installable)
+#       - Separate credentials management per project
+#       - Shared core functions: authenticate_user(), get_message_metadata(), get_message_body()
+# TODO [Update]: Change import from V0.4.py to email_objects.py once that module is finalized
+try:
+    # Read and extract only the function definitions from V0.4.py
+    # Skip module-level code that causes errors
+    v0_4_path = os.path.join(email_tool_path, "V0.4.py")
+    with open(v0_4_path, 'r') as f:
+        lines = f.readlines()
+
+    # Find line 79 where authenticate_user starts (first function we need)
+    # Skip everything before that to avoid module-level instantiation errors
+    start_line = 0
+    for i, line in enumerate(lines):
+        if line.strip().startswith('def authenticate_user'):
+            start_line = i
+            break
+
+    # Execute only from line 79 onwards
+    v0_4_source = ''.join(lines[start_line:])
+
+    # Need to add necessary imports back
+    v0_4_imports = """
+import os.path
+from datetime import datetime, timedelta
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+
+SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
+"""
+
+    v0_4_namespace = {}
+    exec(v0_4_imports + v0_4_source, v0_4_namespace)
+
+    # Extract the functions we need
+    gmail_authenticate = v0_4_namespace.get('authenticate_user')
+    fetch_messages = v0_4_namespace.get('fetch_messages')
+    get_message_metadata = v0_4_namespace.get('get_message_metadata')
+    get_message_body = v0_4_namespace.get('get_message_body')
+    generate_gmail_search_query = v0_4_namespace.get('generate_gmail_search_query')
+
+    # Verify we got all the functions
+    if not all([gmail_authenticate, fetch_messages, get_message_metadata, get_message_body, generate_gmail_search_query]):
+        raise ImportError("Failed to extract required functions from V0.4.py")
+
+    from googleapiclient.discovery import build
+    from google.oauth2.credentials import Credentials
+    GMAIL_AVAILABLE = True
+    print("Gmail functions loaded successfully")
+except Exception as e:
+    print(f"Warning: Could not import Gmail functions: {e}")
+    GMAIL_AVAILABLE = False
 
 import langchain
 
@@ -34,7 +102,7 @@ from langchain.memory import ConversationBufferMemory
 from langchain_core.runnables import RunnableWithMessageHistory
 from langchain.schema import HumanMessage, AIMessage
 
-import pdfplumber
+# import pdfplumber  # Commented out - PDF processing not needed
 import logging
 
 # Set up logging configuration - uncomment when needed
@@ -112,7 +180,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # New system prompt allowing any and all insurance types
 ##########################################################
 
-system_message = """Acting as an expert in U.S. personal insurance and business, please answer questions from the user in a helpful and supportive way about insurance, or about previous parts of the current conversation. If the user asks a question about a particular insurance policy, but no policy has been provided, politely invite them to select a policy from the radio buttons on the left of the screen if they have uploaded policies, or to upload a policy to the Insutrance Portal. If the user asks a question outside the realm of personal insurance or business in the United States (unless it is a question about this conversation) politely answer that you would love to help them, but are only trained to discuss issues and questions regarding personal or business insurance in the U.S. Users may be quite new to the domain of insurance so it is very important that you are welcoming and helpful, and that answers are complete and correct. Please err on the side of completeness rather than on the side of brevity, and always be truthful and accurate. And this is very important: please let the user know that they should always contact an insurance professional before making any important decisions."""
+system_message = """You are a helpful AI assistant. Please respond to the user's questions accurately and concisely. If the user asks about job job listings in the this email, please search for jobs that involve AI Product Management or AI Product Strategy at any level. For each tht that you find that meet that description, please check to see if they are remote, hybrid or local or on-site only, and report that job to the user, letting them know whether it is remote, hybrid or local onsite. If it is hybrid, local, or onsite or in any other way will require the user to be in the office regularly, let them know the location of the position. If you are unsure about any feture of this job, please indicate that you are unsure and let the user now that they should check the specifics of that job themselves. Answer any questions that the user might ask about any of the positions, such as the employer, a brief summary of the job responsibilities and qualifications for the position. Always be truthful and accurate."""
 
 #If the user asks a question about finding an isurance professional or agent, please reply with this exact text: THIS IS JUST A PLACEHOLDER UNTIL THE CORRECT INFORMATION IS SUPPLIED BY ANDY, SCOTT, AND AL. Removed, DR, 3/20.2025 per Andy's request.
 
@@ -148,10 +216,16 @@ memory = ConversationBufferMemory(return_messages=True) #ConversationBuffer
 #################################
 # For Gemini, use the following:
 #################################
+# TODO [Enhancement]: Make model configurable via UI or config file
+#       Options to consider:
+#       - UI dropdown to select model (gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite)
+#       - YAML config file with model selection
+#       - Environment variable override
+#       Once optimal model is determined, pin to specific version (e.g., gemini-2.5-pro-001)
 model = ChatGoogleGenerativeAI(
-    model="gemini-1.5-pro-002",
+    model="gemini-2.5-pro",
     temperature=0.7,
-    convert_messages_to_prompt=False, # We are managing the convo history ourselves, as we do not want it to include the insurancy polcy text, and the policy instructions if/when they are present.
+    convert_messages_to_prompt=False, # We are managing the convo history ourselves
     streaming=True
 )
 
@@ -597,6 +671,129 @@ def handle_policy_selection(session_state: SessionData, user_id: str, selected_p
 
 
 ####################################
+# Email Fetching Handler
+####################################
+
+def handle_fetch_emails(session_state: SessionData, date_str: str):
+    """
+    Fetch emails from Gmail for the specified date.
+
+    Args:
+        session_state: Current session state to store fetched emails
+        date_str: Date in YYYY-MM-DD format (e.g., "2025-11-30")
+
+    Returns:
+        dict with success status and message
+    """
+    if not GMAIL_AVAILABLE:
+        return {"success": False, "error": "Gmail functions not available"}
+
+    try:
+        # Authenticate with Gmail
+        creds = gmail_authenticate()
+        service = build("gmail", "v1", credentials=creds)
+
+        # Generate query for the specified date
+        query = generate_gmail_search_query(date_str, date_str)
+
+        # Fetch all messages
+        messages = fetch_messages(service, query)
+
+        if not messages:
+            return {"success": True, "count": 0, "message": f"No emails found for {date_str}"}
+
+        # Fetch metadata only (lazy load bodies when user views each email)
+        email_list = []
+        for msg in messages:
+            metadata = get_message_metadata(service, msg['id'])
+            email_list.append({
+                'id': metadata['id'],
+                'sender': metadata['sender'],
+                'subject': metadata['subject'],
+                'date': metadata['date'],
+                'internal_date': metadata['internal_date'],  # Include for sorting
+                'body': None  # Will be fetched lazily
+            })
+
+        # Sort emails by internal_date (newest first)
+        email_list.sort(key=lambda x: int(x.get('internal_date', 0)), reverse=True)
+
+        # Store in session state
+        session_state.fetched_emails = email_list
+        session_state.current_email_index = 0
+        session_state.gmail_service = service  # Store service for later body fetching
+
+        # Return ALL email metadata (sorted by date)
+        emails_metadata = []
+        for email in email_list:
+            emails_metadata.append({
+                'sender': email['sender'],
+                'subject': email['subject'],
+                'date': email['date'],
+                'internal_date': email['internal_date']
+            })
+
+        return {
+            "success": True,
+            "count": len(email_list),
+            "message": f"Fetched {len(email_list)} emails from {date_str}",
+            "emails": emails_metadata  # Return all emails at once
+        }
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+# Old sequential navigation removed - replaced with direct email selection via handle_select_email()
+# Users now click any email in the sidebar to select it
+
+
+def handle_select_email(session_state: SessionData, email_index: int):
+    """
+    Select an email by index and fetch its body if needed.
+
+    Args:
+        session_state: Current session state
+        email_index: Index of email in fetched_emails list
+
+    Returns:
+        dict with email data including body
+    """
+    if not hasattr(session_state, 'fetched_emails') or not session_state.fetched_emails:
+        return {"success": False, "error": "No emails fetched"}
+
+    if email_index < 0 or email_index >= len(session_state.fetched_emails):
+        return {"success": False, "error": "Invalid email index"}
+
+    email = session_state.fetched_emails[email_index]
+
+    # Fetch body if not already loaded
+    if email['body'] is None:
+        try:
+            service = session_state.gmail_service
+            email['body'] = get_message_body(service, email['id'])
+        except Exception as e:
+            email['body'] = f"[Error fetching body: {str(e)}]"
+
+    # Update current index
+    session_state.current_email_index = email_index
+
+    return {
+        "success": True,
+        "email": {
+            "sender": email['sender'],
+            "subject": email['subject'],
+            "date": email['date'],
+            "body": email['body']
+        }
+    }
+
+
+# Note: Email context is now injected client-side in script.js before sending queries
+# See handleQuerySubmit() function which prepends email body, sender, subject, and date
+
+
+####################################
 # Clear Button Click Handler
 ####################################
 
@@ -638,23 +835,22 @@ def handle_clear_button_click(session_state, user_id):
 #######################
 # Debugging utilities
 #######################
-
-# docker resource utilities for debugging
-def get_container_resource_usage():
-    try:
-        process = psutil.Process(os.getpid())
-        cpu_percent = process.cpu_percent(interval=0.1)
-        memory_info = process.memory_info()
-        memory_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
-        return f"CPU Usage: {cpu_percent}%, Memory: {memory_mb:.2f}MB"
-    except Exception as e:
-        return f"Error getting resource usage: {e}"
-
-def print_container_limits():
-    try:
-        with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
-            memory_limit = int(f.read().strip()) / (1024 * 1024)  # Convert to MB
-            print(f"Container memory limit: {memory_limit:.2f}MB")
-    except Exception as e:
-        print(f"Could not read container limits: {e}")
+# Commented out - these were for Docker debugging and require psutil
+# def get_container_resource_usage():
+#     try:
+#         process = psutil.Process(os.getpid())
+#         cpu_percent = process.cpu_percent(interval=0.1)
+#         memory_info = process.memory_info()
+#         memory_mb = memory_info.rss / (1024 * 1024)  # Convert to MB
+#         return f"CPU Usage: {cpu_percent}%, Memory: {memory_mb:.2f}MB"
+#     except Exception as e:
+#         return f"Error getting resource usage: {e}"
+#
+# def print_container_limits():
+#     try:
+#         with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
+#             memory_limit = int(f.read().strip()) / (1024 * 1024)  # Convert to MB
+#             print(f"Container memory limit: {memory_limit:.2f}MB")
+#     except Exception as e:
+#         print(f"Could not read container limits: {e}")
 

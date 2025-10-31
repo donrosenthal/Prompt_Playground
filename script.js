@@ -1,165 +1,46 @@
 document.addEventListener('DOMContentLoaded', function() {
     console.log("DOM fully loaded and parsed");
     
-    const greeting = document.getElementById('greeting');
-    const policySidebar = document.getElementById('policySidebar');
     const conversationDisplay = document.getElementById('conversationDisplay');
     const queryInput = document.getElementById('queryInput');
     const submitQuery = document.getElementById('submitQuery');
     const clearConversation = document.getElementById('clearConversation');
-    
+
+    // Email control elements
+    const emailDateInput = document.getElementById('emailDate');
+    const fetchEmailsButton = document.getElementById('fetchEmails');
+    const emailCount = document.getElementById('emailCount');
+    const emailList = document.getElementById('emailList');
+
     console.log("submitQuery:", submitQuery);
     console.log("clearConversation:", clearConversation);
-    console.log("queryInput:", queryInput);   
+    console.log("queryInput:", queryInput);
 
     // Configure the marked library for converting markdown in the botresponse.
-    marked.setOptions({ 
+    marked.setOptions({
         breaks: true,
         gfm: true,
         headerIds: false,
         langPrefix: 'language-',
     });
 
-    let userData = {};
     let eventSource;
+    let currentEmailBody = "";  // Store the current email body for LLM context
+    let fetchedEmails = [];  // Store all fetched emails
+    let activeEmailIndex = -1;  // Currently active email index
 
     function initUI() {
-        console.log("Entering initUI");
-        console.log("Attempting to fetch from /api/init");
-        let currentlySelectedPolicy = 'None';  
-        console.log("Currently selected policy before init:", currentlySelectedPolicy);
-    
-        fetch('/api/init')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(data => {
-                console.log("Received data from /api/init:", data);
-                userData = data;
-                updateGreeting();
-                updatePolicySidebar(currentlySelectedPolicy);
-                loadConversationHistory();
-                
-                // Add a small delay before showing content
-                setTimeout(() => {
-                    document.querySelector('.container').classList.add('loaded');
-                }, 100);
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                greeting.textContent = 'Error loading user data. Please refresh the page.';
-            });
-    
-        // Call handle_focus
-        fetch('/api/handle_focus')
-            .then(response => response.json())
-            .then(data => {
-                console.log('Focus handled, received data:', data);
-                if (data.success) {
-                    userData = data; // Store the entire data object
-                    if (data.selectedPolicy) {
-                        console.log('currentlySelectedPolicy = ', data.selectedPolicy.print_name);
-                        currentlySelectedPolicy = data.selectedPolicy.print_name;
-                    } else {
-                        console.log('No policy currently selected');
-                        currentlySelectedPolicy ='None';                        
-                    }
-                    updatePolicySidebar(currentlySelectedPolicy);
-                    
-                }
-                loadConversationHistory();
-            })
-            .catch(error => console.error('Error handling focus:', error));
+        console.log("Initializing Prompt Playground");
+
+        // Load conversation history
+        loadConversationHistory();
+
+        // Show content
+        setTimeout(() => {
+            document.querySelector('.container').classList.add('loaded');
+        }, 100);
     }
 
-    function updateGreeting() {
-        const greeting = document.getElementById('greeting');
-        greeting.textContent = `Hi ${userData.firstName}! Ask a question about any of your uploaded policies or insurance in general`;
-    }
-
-    function updatePolicySidebar(selectedPolicy) {
-        if (!policySidebar) {
-            console.error("policySidebar element not found");
-            return;
-        }
-        
-        // If no policy is selected, default to 'None'
-        selectedPolicy = selectedPolicy || 'None';
-
-        // Clear existing content
-        policySidebar.innerHTML = '';
-        
-        // Create and add the header
-        const header = document.createElement('h3');
-        header.textContent = "Select a policy to discuss, or 'None' to reset";
-        policySidebar.appendChild(header);
-        
-        if (!userData.policies || userData.policies.length === 0) {
-            const noPoliciesMessage = document.createElement('p');
-            noPoliciesMessage.textContent = 'No policies uploaded yet.';
-            policySidebar.appendChild(noPoliciesMessage);
-        } else { 
-            // Create a container for radio buttons
-            const radioButtonsContainer = document.createElement('div');
-
-            const noneRadio = createRadioButton('None', 'None', selectedPolicy === 'None');
-            radioButtonsContainer.appendChild(noneRadio);
-
-            userData.policies.forEach(policy => {
-                const policyRadio = createRadioButton(policy.print_name, policy.print_name,policy.print_name === selectedPolicy);
-                radioButtonsContainer.appendChild(policyRadio);
-            });
-
-            policySidebar.appendChild(radioButtonsContainer);
-        }
-        console.log('Updated policy sidebar. Selected policy:', selectedPolicy);
-    }
-
-    function createRadioButton(value, label, checked = false) {
-        const container = document.createElement('div');
-        const radio = document.createElement('input');
-        radio.type = 'radio';
-        radio.id = label;
-        radio.name = 'policy';
-        radio.value = label;
-        radio.checked = checked;
-        
-        const labelElement = document.createElement('label');
-        labelElement.htmlFor = label;
-        labelElement.textContent = label;
-        
-        container.appendChild(radio);
-        container.appendChild(labelElement);
-
-        radio.addEventListener('change', handlePolicySelection);
-
-        return container;
-    }
-
-    function handlePolicySelection(event) {
-        const selectedPolicy = event.target.value;
-        console.log(`Selected policy: ${selectedPolicy}`);
-        console.log(`Selected element:`, event.target);
-        console.log(`Selected element value:`, event.target.value);
-        console.log(`Selected element id:`, event.target.id);
-
-        // Update the selected policy in userData
-        currentlySelectedPolicy = selectedPolicy;
-
-        // Simulate sending the selection to the server
-        // In the real implementation, this will be an API call
-        fetch('/api/select_policy?policy=' + encodeURIComponent(selectedPolicy))
-            .then(response => response.json())
-            .then(data => {
-                console.log('Policy selection updated:', data);
-                // Update the UI to reflect the new selection
-                updatePolicySidebar(selectedPolicy);
-             })
-            .catch(error => console.error('Error:', error));
-    }
 
 
     function handleQuerySubmit() {
@@ -171,20 +52,37 @@ document.addEventListener('DOMContentLoaded', function() {
         if (query) {
             addMessageToConversation('User', query);
             queryInput.value = '';
-            
+
             if (eventSource) {
                 eventSource.close();
             }
-            
-            eventSource = new EventSource('/api/chat?message=' + encodeURIComponent(query));
-            
+
+            // Build the full query with email context if available
+            let fullQuery = query;
+            if (activeEmailIndex >= 0 && currentEmailBody) {
+                const email = fetchedEmails[activeEmailIndex];
+                // Email is loaded, prepend full context including body
+                const emailContext = `[EMAIL CONTEXT]
+From: ${email.sender}
+Subject: ${email.subject}
+Date: ${email.date}
+
+Body:
+${currentEmailBody}
+
+[USER QUESTION]
+`;
+                fullQuery = emailContext + query;
+                console.log('Injecting email context with body into query');
+            }
+
+            eventSource = new EventSource('/api/chat?message=' + encodeURIComponent(fullQuery));
+
             let botMessage = document.createElement('div');
             botMessage.className = 'message bot-message';
             conversationDisplay.appendChild(botMessage);
-    
+
             let accumulatedMarkdown = '';
-            let renderBuffer = '';
-            let lastRenderLength = 0;
             
             eventSource.onmessage = function(event) {
                 console.log("Received data:", event.data);
@@ -263,27 +161,157 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.success) {
                     // Clear the conversation display
                     conversationDisplay.innerHTML = '';
-                    
-                    // Reset the policy selection to "None" if radio buttons exist
-                    const noneRadio = document.querySelector('input[name="policy"][value="None"]');
-                    if (noneRadio) {
-                        noneRadio.checked = true;
-                    }
-
-                    // If there's no policy sidebar (i.e., no policies uploaded), we don't need to do anything extra
 
                     // Close the EventSource if it exists
                     if (eventSource) {
                         eventSource.close();
-                        eventSource = null;  // Reset the eventSource variable
+                        eventSource = null;
                     }
-                    
+
                     console.log("Conversation cleared");
                 } else {
                     console.error("Failed to clear conversation");
                 }
             })
             .catch(error => console.error('Error:', error));
+    }
+
+    // Email handling functions
+    function handleFetchEmails() {
+        const dateValue = emailDateInput.value || getTodayDate();
+        console.log('Fetching emails for date:', dateValue);
+
+        // Clear current list
+        emailList.innerHTML = '<div style="padding: 10px; text-align: center; color: #999;">Loading...</div>';
+        emailCount.textContent = '';
+
+        fetch('/api/fetch_emails?date=' + encodeURIComponent(dateValue))
+            .then(response => response.json())
+            .then(data => {
+                console.log('Fetch emails response:', data);
+                if (data.success) {
+                    if (data.count > 0) {
+                        emailCount.textContent = `${data.count} email${data.count > 1 ? 's' : ''}`;
+
+                        // Backend returns all emails sorted by date (newest first)
+                        fetchAllEmailMetadata(data.emails);
+                    } else {
+                        emailCount.textContent = data.message;
+                        emailList.innerHTML = '<div style="padding: 10px; text-align: center; color: #999;">No emails found</div>';
+                    }
+                } else {
+                    alert('Error fetching emails: ' + data.error);
+                    emailList.innerHTML = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching emails:', error);
+                alert('Failed to fetch emails. See console for details.');
+                emailList.innerHTML = '';
+            });
+    }
+
+    function fetchAllEmailMetadata(emailsData) {
+        // Backend returns all emails already sorted by date (newest first)
+        fetchedEmails = emailsData;
+        emailList.innerHTML = '';
+
+        // Add all emails to the list
+        emailsData.forEach((email, index) => {
+            addEmailToList(email, index);
+        });
+
+        // Select first email (newest)
+        if (emailsData.length > 0) {
+            selectEmail(0);
+        }
+    }
+
+    function addEmailToList(email, index) {
+        const emailItem = document.createElement('div');
+        emailItem.className = 'email-item';
+        emailItem.dataset.index = index;
+
+        const sender = document.createElement('div');
+        sender.className = 'email-item-sender';
+        sender.textContent = email.sender || 'Unknown Sender';
+
+        const subject = document.createElement('div');
+        subject.className = 'email-item-subject';
+        subject.textContent = email.subject || '(No Subject)';
+
+        const date = document.createElement('div');
+        date.className = 'email-item-date';
+        date.textContent = email.date || '';
+
+        emailItem.appendChild(sender);
+        emailItem.appendChild(subject);
+        emailItem.appendChild(date);
+
+        emailItem.addEventListener('click', () => selectEmail(index));
+
+        emailList.appendChild(emailItem);
+    }
+
+    function selectEmail(index) {
+        // Remove active class from all items
+        document.querySelectorAll('.email-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // Add active class to selected item
+        const selectedItem = emailList.querySelector(`[data-index="${index}"]`);
+        if (selectedItem) {
+            selectedItem.classList.add('active');
+        }
+
+        // Store active index
+        activeEmailIndex = index;
+
+        // Fetch body from backend (with lazy loading)
+        const email = fetchedEmails[index];
+        if (email) {
+            if (email.body) {
+                // Body already loaded
+                currentEmailBody = email.body;
+                console.log('Email body already loaded');
+            } else {
+                // Fetch body from backend
+                console.log('Fetching email body for index', index);
+                fetch('/api/select_email?index=' + index)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.email) {
+                            currentEmailBody = data.email.body;
+                            // Cache it in our local array
+                            fetchedEmails[index].body = data.email.body;
+                            console.log('Email body loaded');
+                        } else {
+                            console.error('Failed to fetch email body:', data.error);
+                            currentEmailBody = "";
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching email body:', error);
+                        currentEmailBody = "";
+                    });
+            }
+        }
+    }
+
+    function getTodayDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function initEmailControls() {
+        // Set default date to today
+        if (emailDateInput) {
+            emailDateInput.value = getTodayDate();
+        }
     }
 
     // Event listeners
@@ -298,6 +326,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Email event listeners
+    if (fetchEmailsButton) fetchEmailsButton.addEventListener('click', handleFetchEmails);
+
     // Initialize the UI when the page loads
     initUI();
+    initEmailControls();
 });

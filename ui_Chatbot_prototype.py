@@ -23,7 +23,11 @@ google_api_key = os.getenv('GOOGLE_API_KEY')
 langchain_api_key = os.getenv('LANGCHAIN_API_KEY')
 
 from persistent_data.ui_session_data_mgmt import SessionData
-from handlers.ui_handler_functions import handle_focus, handle_query, handle_clear_button_click, handle_policy_selection, memory, HumanMessage, AIMessage
+from handlers.ui_handler_functions import (
+    handle_focus, handle_query, handle_clear_button_click, handle_policy_selection,
+    handle_fetch_emails, handle_select_email,
+    memory, HumanMessage, AIMessage
+)
 from server_data.ui_server_side_data import create_server_user_data, ServerUserDataCollection
 
 global session_state
@@ -146,6 +150,38 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
             response = json.dumps(response_data)
             self.wfile.write(response.encode())
 
+        elif self.path.startswith('/api/fetch_emails'):
+            # Extract date parameter from query string
+            query_params = parse_qs(urlparse(self.path).query)
+            date_str = query_params.get('date', [''])[0]
+
+            if not date_str:
+                # Default to today
+                from datetime import datetime
+                date_str = datetime.now().strftime('%Y-%m-%d')
+
+            result = handle_fetch_emails(session_state, date_str)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
+
+        elif self.path.startswith('/api/select_email'):
+            # Extract index parameter from query string
+            query_params = parse_qs(urlparse(self.path).query)
+            index_str = query_params.get('index', ['0'])[0]
+
+            try:
+                email_index = int(index_str)
+                result = handle_select_email(session_state, email_index)
+            except ValueError:
+                result = {"success": False, "error": "Invalid index parameter"}
+
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
+
         elif self.path == '/favicon.ico':
             # Ignore the request for favicon.ico
             self.send_response(204)  # No Content
@@ -177,6 +213,19 @@ if __name__ == "__main__":
     handle_focus(session_state, user_id, session_id, server_user_data)
 
     with socketserver.TCPServer(("", PORT), MyHandler) as httpd:
+        import webbrowser
+        import threading
+
+        print(f"Server running at http://localhost:{PORT}")
+        print("Press Ctrl+C to stop")
+
+        # Open browser after a short delay to let server start
+        def open_browser():
+            import time
+            time.sleep(1)
+            webbrowser.open(f'http://localhost:{PORT}/chatbot.html')
+
+        threading.Thread(target=open_browser, daemon=True).start()
         httpd.serve_forever()
 
 

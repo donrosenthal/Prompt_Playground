@@ -3,20 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Insurance Portal Chat Demo</title>
+    <title>Prompt Playground</title>
     <link rel="stylesheet" href="/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.3/purify.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <button onclick="window.location.href='home.html'">Click here to switch to the Homepage</button>
-        <h1>Insurance Portal Chat Demo V2.ui (UI Prototype Version)</h1>
-        <div id="greeting"></div>
+        <h1>Prompt Playground</h1>
+        <p class="tagline">Test LLM prompts with real Gmail data</p>
         <div class="main-content">
-            <div id="policySidebar" class="sidebar">
-                <h3>Select a policy for conversation, or "None" to reset</h3>
+            <!-- Email Sidebar -->
+            <div id="emailSidebar" class="sidebar">
+                <h3>Email List</h3>
+                <div class="email-fetch-section">
+                    <input type="date" id="emailDate" />
+                    <button id="fetchEmails">Fetch</button>
+                </div>
+                <div id="emailCount" class="email-count"></div>
+                <div id="emailList" class="email-list">
+                    <!-- Email items will be populated here dynamically -->
+                </div>
             </div>
+
             <div class="chat-area">
                 <div id="conversationDisplay"></div>
                 <textarea id="queryInput" placeholder="Type your message..."></textarea>
